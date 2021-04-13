@@ -1,5 +1,5 @@
 ---
-title: "Statystyka opisowa w R - studium przypadku"
+title: "Statystyka opisowa w języku R - studium przypadku"
 output:
   html_document:
     df_print: paged
