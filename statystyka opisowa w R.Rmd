@@ -1,0 +1,406 @@
+---
+title: "Statystyka opisowa w R - studium przypadku"
+output:
+  html_document:
+    df_print: paged
+---
+
+**Przedmiotowe dane zawierają informacje z ankiet przeprowadzonych Wśród mieszkańców jednego z osiedla mieszkaniowego w Poznaniu. Dane te są fikcyjne i mają charakter poglądowy.**
+
+Załadowanie bibliotek:
+
+```{r}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+
+```
+
+Załadowanie danych:
+
+```{r}
+ankieta <- read_excel("F:/R/dane.xlsx", sheet = "dane źródłowe ")
+
+```
+
+Podgląd danych:
+
+```{r}
+ankieta
+
+```
+
+```{r}
+
+poznaj.dane<- function(x) {
+  
+    rozmiar.zbioru<-dim(x)
+    liczba.obserwacji<-nrow(x)
+    liczba.zmiennych<-ncol(x)
+    liczba.duplikatów<-sum(duplicated(x))
+    liczba.na<-sum(is.na(x))
+    liczba.null<-sum(is.null(x))
+    opis<-data.frame(liczba.obserwacji,liczba.zmiennych, 
+              liczba.duplikatów, liczba.na, liczba.null)
+    opis<-pivot_longer(data = opis, cols = 1:5, 
+                        names_to = "cecha", values_to = "liczebnosć")
+    return(opis)
+}
+```
+
+Informacja szczegółowa o danych:
+
+```{r}
+poznaj.dane(ankieta)
+```
+
+Z powyższych informacji wynika, że w danych znajdują się duplikaty, obserwacje puste, zatem dane te zostaną oczyszczone.
+
+-   braki danych
+
+```{r}
+braki.obserwacji<-data.frame(nr.wiersza=rownames(ankieta),liczba.pustych=rowSums(is.na(ankieta)),proc.pustych=round(100*rowSums(is.na(ankieta))/ncol(ankieta),2))%>%filter(liczba.pustych>0)
+
+braki.zmiennych<- data.frame(liczba.pustych=colSums(is.na(ankieta)),proc.pustych=round(100*colSums(is.na(ankieta))/nrow(ankieta),2))%>%filter(liczba.pustych>0)
+
+```
+
+```{r}
+braki.zmiennych
+```
+
+```{r}
+braki.obserwacji
+```
+
+```{r}
+obserwacje.z.brakami<-ankieta[!complete.cases(ankieta),]
+obserwacje.z.brakami
+```
+
+-   duplikaty
+
+```{r}
+obserwacje.duplikaty<-ankieta[duplicated(ankieta),]
+
+```
+
+```{r}
+obserwacje.duplikaty
+```
+
+Z uwagi na niewielką liczbę braków, wiersze z brakami danych zostaną usunięte, nie wpłynie to na wynika analizy, tym bardziej, że typ tych braków nie wynika z charakteru danych , a jedynie z błędnie uzupełnionej tabeli źródłowej.
+
+Ponadto należny zauważyć, że 3 wiersze zostały w trakcje sporządzania tabeli danych zdublowane, zatem i te obserwacje zostaną usunięte.
+
+```{r}
+# usunięcie zduplikowanych
+
+ankieta<-ankieta[!duplicated(ankieta),]
+
+```
+
+```{r}
+# usunięcie braków
+ankieta<-na.omit(ankieta)
+
+```
+
+Informacja na temat danych po ich oczyszczeniu
+
+```{r}
+poznaj.dane(ankieta)
+```
+
+Z powyższego wynika, że dane zostały wstępnie oczyszczone, nie występują braki danych oraz obserwacje zdublowane.
+
+Zatem można przejść do analizy opisowej.
+
+Dokonano podziału danych wg typów zmiennych, jest to niezbędne do wybory odpowiedniego parametru opisu statystycznego
+
+```{r}
+zmienne.ilościowe<-names(select(ankieta,4,5))
+zmienne.jakościowe<-names(select(ankieta,2,3,6))
+
+
+```
+
+zmienne ilościowe:
+
+```{r}
+zmienne.ilościowe
+
+```
+
+zmienne jakosciowe:
+
+```{r}
+zmienne.jakościowe
+
+```
+
+Analiza zmiennych jakościowych
+
+1)  płeć
+
+2)  wykształcenie
+
+3)  typ sklepu
+
+```{r}
+# przekonwertowanie na faktory
+
+    ankieta$płeć<-as.factor(ankieta$płeć)
+    ankieta$wykształcenie<-as.factor(ankieta$wykształcenie)
+    ankieta$sklep<-as.factor(ankieta$sklep)
+```
+
+ustalenie poziomów poszczególnych zmiennych:
+
+```{r}
+levels(ankieta$wykształcenie)
+
+```
+
+```{r}
+levels(ankieta$płeć)
+```
+
+```{r}
+levels(ankieta$sklep)
+
+```
+
+Należy zawszyć, że kolejności poziomów zmiennej" wykształcenie" jest nieprawidłowa, zatem pokonano zmiany ich pozycji
+
+-   zmiana kolejności czynników
+
+```{r}
+ankieta$wykształcenie<-ordered(ankieta$wykształcenie,levels=c("P","Z","Ś","W"))
+
+```
+
+po zmianie kolejności:
+
+```{r}
+levels(ankieta$wykształcenie)
+```
+
+dla czytelności analizy poziomy te zostaną również przekodowane na pełne nazwy
+
+\- poziomów wykształcenia
+
+```{r}
+ankieta$wykształcenie<-recode_factor(ankieta$wykształcenie,"P"="podstawowe", "Z"="zawodowe","Ś"="średnie","W"="wyższe")
+```
+
+po zmianie
+
+```{r}
+ levels(ankieta$wykształcenie)
+```
+
+\- poziomów płci:
+
+```{r}
+ankieta$płeć<-recode_factor(ankieta$płeć,"K"="Kobieta", "M"="Mężczyzna")
+```
+
+po zmianie:
+
+```{r}
+  levels(ankieta$płeć)
+```
+
+określenie liczebności, % częstości zmiennych jakościowych oraz ich wykresy
+
+[**PŁEĆ**]{.ul}
+
+```{r message=FALSE, warning=FALSE}
+ankieta%>%group_by(płeć)%>%summarise(liczebność=n(), proc=liczebność/length(ankieta$płeć)*100)
+```
+
+```{r}
+ggplot(ankieta, aes(płeć))+ geom_bar(fill=NA, colour="black")+theme_classic()
+```
+
+**WYKSZTAŁCENIE**
+
+```{r message=FALSE, warning=FALSE}
+ankieta%>%group_by(wykształcenie)%>%summarise(liczebność=n(), proc=liczebność/length(ankieta$wykształcenie)*100)
+
+```
+
+```{r}
+ggplot(ankieta, aes(wykształcenie))+ geom_bar(fill=NA, colour="black")+theme_classic()
+```
+
+**TYP SKLEPU**
+
+```{r message=FALSE, warning=FALSE}
+ankieta%>%group_by(sklep)%>%summarise(liczebność=n(), proc=liczebność/length(ankieta$sklep)*100)
+```
+
+```{r}
+ggplot(ankieta, aes(sklep))+ geom_bar(fill=NA, colour="black")+theme_classic()
+
+```
+
+ZMIENNE ILOŚCIOWE
+
+Do analizy zostaną przyjęte zmienne: - dochody - wydatki_zywnosć
+
+podgląd danych w ujęciu graficznym - ustalenie rozkładów poszczególnych zmiennych oraz ich charakterystyk liczbowych.
+
+```{r}
+# utworzenie funkcji obliczającej miary statystyczne
+
+
+miary.statystyczne<- function(x) {
+  
+  
+min<-min(x)
+max<-max(x)
+srednia<-mean(x)
+q1<-quantile(x, probs = 0.25)
+mediana<-median(x)
+q3<-quantile(x, probs = 0.75)
+
+ mode <- function(x) {
+      unique_num <- unique(x)
+      unique_num [which.max(tabulate(match(x, unique_num )))]
+ }
+ 
+rozstęp<-max(x)-min(x)
+
+rozstęp_międzykwarylowy = q3-q1
+odchylenie_ćwiartkowe<- rozstęp_międzykwarylowy/2
+
+
+dl<-length(x)-1
+
+variancja<-sum((x-srednia)^2)/dl
+odchylenie_standardowe<-sqrt(variancja)
+
+
+odchylenie_przecietne<-mean(sum(abs(x-srednia)))/dl
+
+
+kl_wsp_zmienności<-(odchylenie_standardowe/srednia)*100
+poz_wsp_zmiennosci<-(rozstęp_międzykwarylowy/mediana)*100
+
+
+mode <- function(x) {
+      unique_num <- unique(x)
+      unique_num [which.max(tabulate(match(x, unique_num )))]
+}
+
+ws.asymetri<-srednia-mode(x)
+
+ws.asymetrii.pearson<-round(ws.asymetri/odchylenie_standardowe,2)
+
+
+m3<-sum((x-srednia)^3)/dl
+m4<-sum((x-srednia)^4)/dl                                                                                                                                                                                                            
+
+
+stand.m3<-round(m3/(odchylenie_standardowe)^3,2)
+
+ws.asymertii.wew<-round((q1+q3)-(2*mediana),2)
+
+stand.m4<-round(m4/(odchylenie_standardowe)^4,2)
+
+eksces<-round(m4/(odchylenie_standardowe)^4,2)-3
+
+
+
+
+kl_typ_obszar_zmienności.a<-srednia - odchylenie_standardowe
+kl_typ_obszar_zmienności.b<- srednia + odchylenie_standardowe
+
+
+poz_typ_obszar_zmienności.a<- mediana- odchylenie_ćwiartkowe
+poz_typ_obszar_zmienności.b<- mediana + odchylenie_ćwiartkowe
+
+
+
+
+miary<-data.frame(miara=c("min", "max","średnia", "Q1.25%", "mediana", "Q3.75%","rozstęp", "rozstęp_międzykwarylowy", "odchylenie_ćwiartkowe", 'variancja', "odchylenie_standardowe", "odchylenie_przecietne", "kl_wsp_zmienności", "poz_wsp_zmiennosci", "wsp asymetrii", "ws.asymetrii.pearson", "stand.m3","ws.asymertii.wew", "stand.m4", "eksces"), wartość=c(min, max, srednia, q1, mediana, q3,rozstęp, rozstęp_międzykwarylowy, odchylenie_ćwiartkowe, variancja, odchylenie_standardowe, odchylenie_przecietne, kl_wsp_zmienności, poz_wsp_zmiennosci, ws.asymetri, ws.asymetrii.pearson, stand.m3, ws.asymertii.wew, stand.m4, eksces ))
+
+return(miary)
+
+
+}
+
+
+```
+
+1)  DOCHODY
+
+-   wykresy:
+
+```{r}
+ggplot(ankieta, aes(dochody))+ geom_boxplot(fill=NA, colour="black")+theme_classic()
+```
+
+```{r}
+ggplot(ankieta, aes(dochody))+ geom_histogram( bins=8, fill=NA, color="black", alpha=0.9)+ theme_classic()
+```
+
+```{r}
+ggplot(ankieta, aes(dochody))+ geom_density(fill=NA, colour="black")+theme_classic()
+```
+
+```{r}
+ggplot(ankieta, aes(dochody))+stat_ecdf()+ theme_classic()
+```
+
+```{r}
+ggplot(ankieta, aes(sample = dochody)) +stat_qq() + stat_qq_line(colour="red")+ theme_classic()
+```
+
+-   miary statystyczne
+
+    ```{r}
+    kable( miary.statystyczne(ankieta$dochody), digits = 2)
+    ```
+
+2)  WYDATKI NA ŻYWNOŚĆ
+
+-   wykresy:
+
+```{r}
+ggplot(ankieta, aes(wydatki_żywność))+ geom_boxplot(fill=NA, colour="black")+theme_classic()
+
+```
+
+```{r}
+ggplot(ankieta, aes(wydatki_żywność))+ geom_histogram( bins=8, fill=NA, color="black", alpha=0.9)+ theme_classic()
+```
+
+```{r}
+ggplot(ankieta, aes(wydatki_żywność))+ geom_density(fill=NA, colour="black")+theme_classic()
+
+```
+
+```{r}
+ggplot(ankieta, aes(wydatki_żywność))+stat_ecdf()+ theme_classic()
+```
+
+```{r}
+ggplot(ankieta, aes(sample = wydatki_żywność)) +stat_qq() + stat_qq_line(colour="red")+ theme_classic()
+```
+
+-   miary:
+
+    ```{r}
+     kable( miary.statystyczne(ankieta$wydatki_żywność), digits = 2)
+
+
+
+
+    ```
